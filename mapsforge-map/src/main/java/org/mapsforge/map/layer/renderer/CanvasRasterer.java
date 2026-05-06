@@ -25,13 +25,17 @@ import org.mapsforge.core.model.Point;
 import org.mapsforge.core.model.Rectangle;
 import org.mapsforge.core.model.Rotation;
 import org.mapsforge.core.model.Tile;
+import org.mapsforge.core.util.MercatorProjection;
 import org.mapsforge.core.util.Parameters;
 import org.mapsforge.map.rendertheme.RenderContext;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class CanvasRasterer {
+    private static final int DEFAULT_TILE_BOUNDARY_ENLARGEMENT = 20;
+
     private final RenderContext renderContext;
     private final Canvas canvas;
     private final Path path;
@@ -130,9 +134,21 @@ public class CanvasRasterer {
     }
 
     private void drawPath(ShapePaintContainer shapePaintContainer, Point[][] coordinates, float dy) {
+        if (shapePaintContainer.omitTileBoundarySegments && shapePaintContainer.shapeContainer instanceof PolylineContainer) {
+            PolylineContainer polylineContainer = (PolylineContainer) shapePaintContainer.shapeContainer;
+            Rectangle sourceTileBoundary = getSourceTileBoundary(polylineContainer);
+            if (sourceTileBoundary != null) {
+                double enlargement = getSourceTileBoundaryEnlargement(polylineContainer);
+                coordinates = removeTileBoundarySegments(coordinates, sourceTileBoundary, enlargement);
+            }
+        }
+
         if (shapePaintContainer.curveStyle == Curve.CUBIC) {
             // When cubic, paths must be used.
             makeCubicPath(coordinates, dy, this.path);
+            drawPath(shapePaintContainer);
+        } else if (shapePaintContainer.omitTileBoundarySegments) {
+            makeLinesPath(coordinates, dy, this.path);
             drawPath(shapePaintContainer);
         } else if (shapePaintContainer.paint.isComplexStyle()) {
             // When complex (e.g. filled) style, paths must be used.
@@ -249,5 +265,99 @@ public class CanvasRasterer {
                 }
             }
         }
+    }
+
+    private static Point[][] removeTileBoundarySegments(Point[][] coordinates, Rectangle tileBoundary, double enlargement) {
+        double tolerance = 1d;
+        List<Point[]> result = new ArrayList<>();
+
+        for (Point[] points : coordinates) {
+            List<Point> current = new ArrayList<>();
+            for (int i = 1; i < points.length; ++i) {
+                Point previous = points[i - 1];
+                Point next = points[i];
+                if (isTileBoundarySegment(previous, next, tileBoundary, enlargement, tolerance)) {
+                    addSegment(result, current);
+                    current.clear();
+                } else {
+                    if (current.isEmpty()) {
+                        current.add(previous);
+                    }
+                    current.add(next);
+                }
+            }
+            addSegment(result, current);
+        }
+
+        return result.toArray(new Point[result.size()][]);
+    }
+
+    private Rectangle getSourceTileBoundary(PolylineContainer polylineContainer) {
+        Tile sourceTile = polylineContainer.getSourceTile();
+        if (sourceTile == null) {
+            return null;
+        }
+
+        Tile renderTile = this.renderContext.rendererJob.tile;
+        double zoomScale = Math.pow(2, sourceTile.zoomLevel - renderTile.zoomLevel);
+        double sourceTileSize = renderTile.tileSize / zoomScale;
+        Point renderTileOrigin = renderTile.getOrigin();
+        double left = sourceTile.tileX * sourceTileSize - renderTileOrigin.x;
+        double top = sourceTile.tileY * sourceTileSize - renderTileOrigin.y;
+        return new Rectangle(left, top, left + sourceTileSize, top + sourceTileSize);
+    }
+
+    private double getSourceTileBoundaryEnlargement(PolylineContainer polylineContainer) {
+        Tile sourceTile = polylineContainer.getSourceTile();
+        double latitude = MercatorProjection.tileYToLatitude(sourceTile.tileY, sourceTile.zoomLevel);
+        return MercatorProjection.metersToPixels(DEFAULT_TILE_BOUNDARY_ENLARGEMENT, latitude,
+                this.renderContext.rendererJob.tile.mapSize);
+    }
+
+    private static void addSegment(List<Point[]> result, List<Point> points) {
+        if (points.size() >= 2) {
+            result.add(points.toArray(new Point[points.size()]));
+        }
+    }
+
+    private static boolean isTileBoundarySegment(Point from, Point to, Rectangle tileBoundary,
+                                                 double enlargement, double tolerance) {
+        double left = tileBoundary.left - enlargement;
+        double right = tileBoundary.right + enlargement;
+        double top = tileBoundary.top - enlargement;
+        double bottom = tileBoundary.bottom + enlargement;
+
+        return isVerticalBoundarySegment(from, to, left, tileBoundary.left, top, bottom, tolerance)
+                || isVerticalBoundarySegment(from, to, tileBoundary.right, right, top, bottom, tolerance)
+                || isHorizontalBoundarySegment(from, to, top, tileBoundary.top, left, right, tolerance)
+                || isHorizontalBoundarySegment(from, to, tileBoundary.bottom, bottom, left, right, tolerance);
+    }
+
+    private static boolean isVerticalBoundarySegment(Point from, Point to, double minX, double maxX,
+                                                     double minY, double maxY, double tolerance) {
+        return isSameCoordinate(from.x, to.x, tolerance)
+                && isBetween(from.x, minX, maxX, tolerance)
+                && isBetween(to.x, minX, maxX, tolerance)
+                && isBetween(from.y, to.y, minY, maxY, tolerance);
+    }
+
+    private static boolean isHorizontalBoundarySegment(Point from, Point to, double minY, double maxY,
+                                                       double minX, double maxX, double tolerance) {
+        return isSameCoordinate(from.y, to.y, tolerance)
+                && isBetween(from.y, minY, maxY, tolerance)
+                && isBetween(to.y, minY, maxY, tolerance)
+                && isBetween(from.x, to.x, minX, maxX, tolerance);
+    }
+
+    private static boolean isSameCoordinate(double first, double second, double tolerance) {
+        return Math.abs(first - second) <= tolerance;
+    }
+
+    private static boolean isBetween(double from, double to, double start, double end, double tolerance) {
+        return isBetween(to, start, end, tolerance) && isBetween(from, start, end, tolerance);
+    }
+
+    private static boolean isBetween(double value, double start, double end, double tolerance) {
+        return value >= start - tolerance && value <= end + tolerance;
     }
 }

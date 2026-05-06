@@ -42,6 +42,7 @@ public class PolylineContainer implements ShapeContainer {
     private final byte layer;
     private final Tile upperLeft;
     private final Tile lowerRight;
+    private final Tile sourceTile;
     private final boolean isClosedWay;
     private Way way;
 
@@ -51,6 +52,7 @@ public class PolylineContainer implements ShapeContainer {
         this.tags = way.tags;
         this.upperLeft = upperLeft;
         this.lowerRight = lowerRight;
+        this.sourceTile = way.sourceTile;
         this.layer = way.layer;
         this.way = way;
         this.isClosedWay = LatLongUtils.isClosedWay(way.latLongs[0]);
@@ -67,6 +69,7 @@ public class PolylineContainer implements ShapeContainer {
         this.tags = tags;
         this.upperLeft = upperLeft;
         this.lowerRight = lowerRight;
+        this.sourceTile = null;
         this.layer = 0;
         isClosedWay = coordinates[0].equals(coordinates[coordinates.length - 1]);
     }
@@ -135,5 +138,9 @@ public class PolylineContainer implements ShapeContainer {
 
     public Tile getLowerRight() {
         return this.lowerRight;
+    }
+
+    public Tile getSourceTile() {
+        return this.sourceTile;
     }
 }

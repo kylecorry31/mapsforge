@@ -49,6 +49,7 @@ public class StandardRenderer {
     public final HillsRenderConfig hillsRenderConfig;
     public final MapDataStore mapDataStore;
     protected final boolean renderLabels;
+    protected final boolean omitTileBoundarySegments;
 
     protected final MyRenderCallback renderCallback = new MyRenderCallback();
 
@@ -72,10 +73,26 @@ public class StandardRenderer {
     public StandardRenderer(MapDataStore mapDataStore,
                             GraphicFactory graphicFactory,
                             boolean renderLabels, HillsRenderConfig hillsRenderConfig) {
+        this(mapDataStore, graphicFactory, renderLabels, hillsRenderConfig, false);
+    }
+
+    /**
+     * Constructs a new StandardRenderer.
+     *
+     * @param mapDataStore      the MapDataStore from which the map data will be read.
+     * @param hillsRenderConfig optional relief shading support.
+     * @param omitTileBoundarySegments whether to omit segments that match a tile boundary. This fixes the scenario where ways render lines along tile borders when not intended. If a line intentionally runs along a tile border, it will not be rendered.
+     */
+    public StandardRenderer(MapDataStore mapDataStore,
+                            GraphicFactory graphicFactory,
+                            boolean renderLabels,
+                            HillsRenderConfig hillsRenderConfig,
+                            boolean omitTileBoundarySegments) {
         this.mapDataStore = mapDataStore;
         this.graphicFactory = graphicFactory;
         this.renderLabels = renderLabels;
         this.hillsRenderConfig = hillsRenderConfig;
+        this.omitTileBoundarySegments = omitTileBoundarySegments;
     }
 
     /**
@@ -185,7 +202,7 @@ public class StandardRenderer {
     public class MyRenderCallback implements RenderCallback {
         @Override
         public void renderArea(final RenderContext renderContext, Paint fill, Paint stroke, int level, PolylineContainer way) {
-            renderContext.addToCurrentDrawingLayer(level, new ShapePaintContainer(way, stroke));
+            renderContext.addToCurrentDrawingLayer(level, new ShapePaintContainer(way, stroke, 0f, Curve.NO, omitTileBoundarySegments));
             renderContext.addToCurrentDrawingLayer(level, new ShapePaintContainer(way, fill));
         }
 
@@ -232,7 +249,7 @@ public class StandardRenderer {
 
         @Override
         public void renderWay(final RenderContext renderContext, Paint stroke, float dy, Curve curveStyle, int level, PolylineContainer way) {
-            renderContext.addToCurrentDrawingLayer(level, new ShapePaintContainer(way, stroke, dy, curveStyle));
+            renderContext.addToCurrentDrawingLayer(level, new ShapePaintContainer(way, stroke, dy, curveStyle, omitTileBoundarySegments && way.isClosedWay() && way.getSourceTile() != null));
         }
 
         @Override

@@ -18,6 +18,7 @@ package org.mapsforge.map.datastore;
 
 import org.mapsforge.core.model.LatLong;
 import org.mapsforge.core.model.Tag;
+import org.mapsforge.core.model.Tile;
 
 import java.util.Arrays;
 import java.util.List;
@@ -47,11 +48,21 @@ public class Way implements Comparable<Way> {
      */
     public final List<Tag> tags;
 
+    /**
+     * The map-file tile this way was decoded from (may be null).
+     */
+    public final Tile sourceTile;
+
     public Way(byte layer, List<Tag> tags, LatLong[][] latLongs, LatLong labelPosition) {
+        this(layer, tags, latLongs, labelPosition, null);
+    }
+
+    public Way(byte layer, List<Tag> tags, LatLong[][] latLongs, LatLong labelPosition, Tile sourceTile) {
         this.layer = layer;
         this.tags = tags;
         this.latLongs = latLongs;
         this.labelPosition = labelPosition;
+        this.sourceTile = sourceTile;
     }
 
     @Override

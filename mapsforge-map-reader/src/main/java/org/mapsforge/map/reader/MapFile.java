@@ -508,7 +508,7 @@ public class MapFile extends MapDataStore {
 
     private PoiWayBundle processBlock(QueryParameters queryParameters, SubFileParameter subFileParameter,
                                       BoundingBox boundingBox, double tileLatitude, double tileLongitude,
-                                      Selector selector, ReadBuffer readBuffer) {
+                                      Tile sourceTile, Selector selector, ReadBuffer readBuffer) {
         if (!processBlockSignature(readBuffer)) {
             return null;
         }
@@ -553,7 +553,7 @@ public class MapFile extends MapDataStore {
             readBuffer.setBufferPosition(firstWayOffset);
 
             ways = processWays(queryParameters, waysOnQueryZoomLevel, boundingBox,
-                    filterRequired, tileLatitude, tileLongitude, selector, readBuffer);
+                    filterRequired, tileLatitude, tileLongitude, sourceTile, selector, readBuffer);
             if (ways == null) {
                 return null;
             }
@@ -659,8 +659,11 @@ public class MapFile extends MapDataStore {
                         subFileParameter.baseZoomLevel);
 
                 try {
+                    Tile sourceTile = new Tile((int) (subFileParameter.boundaryTileLeft + column),
+                            (int) (subFileParameter.boundaryTileTop + row), subFileParameter.baseZoomLevel,
+                            mapFileHeader.getMapFileInfo().tilePixelSize);
                     PoiWayBundle poiWayBundle = processBlock(queryParameters, subFileParameter, boundingBox,
-                            tileLatitude, tileLongitude, selector, readBuffer);
+                            tileLatitude, tileLongitude, sourceTile, selector, readBuffer);
                     if (poiWayBundle != null) {
                         mapFileReadResult.add(poiWayBundle);
                     }
@@ -786,7 +789,7 @@ public class MapFile extends MapDataStore {
     }
 
     private List<Way> processWays(QueryParameters queryParameters, int numberOfWays, BoundingBox boundingBox,
-                                  boolean filterRequired, double tileLatitude, double tileLongitude,
+                                  boolean filterRequired, double tileLatitude, double tileLongitude, Tile sourceTile,
                                   Selector selector, ReadBuffer readBuffer) {
         List<Way> ways = new ArrayList<>();
         Tag[] wayTags = this.mapFileHeader.getMapFileInfo().wayTags;
@@ -887,7 +890,7 @@ public class MapFile extends MapDataStore {
                             labelLatLong = new LatLong(wayNodes[0][0].latitude + LatLongUtils.microdegreesToDegrees(labelPosition[1]),
                                     wayNodes[0][0].longitude + LatLongUtils.microdegreesToDegrees(labelPosition[0]));
                         }
-                        ways.add(new Way(layer, tags, wayNodes, labelLatLong));
+                        ways.add(new Way(layer, tags, wayNodes, labelLatLong, sourceTile));
                     }
                 }
             }

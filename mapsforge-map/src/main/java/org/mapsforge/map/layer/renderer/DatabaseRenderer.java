@@ -71,7 +71,29 @@ public class DatabaseRenderer extends StandardRenderer {
     public DatabaseRenderer(MapDataStore mapDataStore, GraphicFactory graphicFactory, TileCache tileCache,
                             LabelStore labelStore, boolean renderLabels, boolean cacheLabels,
                             HillsRenderConfig hillsRenderConfig) {
-        super(mapDataStore, graphicFactory, renderLabels || cacheLabels, hillsRenderConfig);
+        this(mapDataStore, graphicFactory, tileCache, labelStore, renderLabels, cacheLabels, hillsRenderConfig, false);
+    }
+
+    /**
+     * Constructs a new DatabaseRenderer.
+     * There are three possible configurations:
+     * 1) render labels directly onto tiles: renderLabels == true && tileCache != null
+     * 2) do not render labels but cache them: renderLabels == false && labelStore != null
+     * 3) do not render or cache labels: renderLabels == false && labelStore == null
+     *
+     * @param mapDataStore      the data source.
+     * @param graphicFactory    the graphic factory.
+     * @param tileCache         where tiles are cached (needed if labels are drawn directly onto tiles, otherwise null)
+     * @param labelStore        where labels are cached.
+     * @param renderLabels      if labels should be rendered.
+     * @param cacheLabels       if labels should be cached.
+     * @param hillsRenderConfig the hillshading setup to be used (can be null).
+     * @param omitTileBoundarySegments whether to omit segments that match a tile boundary. This fixes the scenario where ways render lines along tile borders when not intended. If a line intentionally runs along a tile border, it will not be rendered.
+     */
+    public DatabaseRenderer(MapDataStore mapDataStore, GraphicFactory graphicFactory, TileCache tileCache,
+                            LabelStore labelStore, boolean renderLabels, boolean cacheLabels,
+                            HillsRenderConfig hillsRenderConfig, boolean omitTileBoundarySegments) {
+        super(mapDataStore, graphicFactory, renderLabels || cacheLabels, hillsRenderConfig, omitTileBoundarySegments);
         this.tileCache = tileCache;
         this.labelStore = labelStore;
         this.renderLabels = renderLabels;

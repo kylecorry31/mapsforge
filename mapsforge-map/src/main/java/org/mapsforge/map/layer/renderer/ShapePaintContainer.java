@@ -22,15 +22,21 @@ public class ShapePaintContainer {
     final Paint paint;
     final ShapeContainer shapeContainer;
     final Curve curveStyle;
+    final boolean omitTileBoundarySegments;
 
     public ShapePaintContainer(ShapeContainer shapeContainer, Paint paint) {
         this(shapeContainer, paint, 0f, Curve.NO);
     }
 
     public ShapePaintContainer(ShapeContainer shapeContainer, Paint paint, float dy, Curve curveStyle) {
+        this(shapeContainer, paint, dy, curveStyle, false);
+    }
+
+    ShapePaintContainer(ShapeContainer shapeContainer, Paint paint, float dy, Curve curveStyle, boolean omitTileBoundarySegments) {
         this.shapeContainer = shapeContainer;
         this.paint = paint;
         this.dy = dy;
         this.curveStyle = curveStyle;
+        this.omitTileBoundarySegments = omitTileBoundarySegments;
     }
 }

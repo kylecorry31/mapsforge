@@ -30,8 +30,8 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Represents a closed polygon on the map.
@@ -69,7 +69,7 @@ public class Area extends RenderInstruction {
         this.stroke.setStyle(Style.STROKE);
         this.stroke.setStrokeCap(Cap.ROUND);
 
-        this.strokes = new HashMap<>();
+        this.strokes = new ConcurrentHashMap<>();
 
         extractValues(elementName, pullParser);
     }

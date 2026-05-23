@@ -29,8 +29,8 @@ import org.mapsforge.map.rendertheme.XmlUtils;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Represents a round area on the map.
@@ -57,13 +57,13 @@ public class Circle extends RenderInstruction {
         this.fill = graphicFactory.createPaint();
         this.fill.setColor(Color.TRANSPARENT);
         this.fill.setStyle(Style.FILL);
-        this.fills = new HashMap<>();
+        this.fills = new ConcurrentHashMap<>();
 
         this.stroke = graphicFactory.createPaint();
         this.stroke.setColor(Color.TRANSPARENT);
         this.stroke.setStyle(Style.STROKE);
-        this.strokes = new HashMap<>();
-        this.renderRadiusScaled = new HashMap<>();
+        this.strokes = new ConcurrentHashMap<>();
+        this.renderRadiusScaled = new ConcurrentHashMap<>();
 
         extractValues(graphicFactory, displayModel, elementName, pullParser);
 
@@ -130,9 +130,7 @@ public class Circle extends RenderInstruction {
 
     @Override
     public void renderNode(RenderCallback renderCallback, final RenderContext renderContext, PointOfInterest poi) {
-        synchronized (mySync) {
-            renderCallback.renderPointOfInterestCircle(renderContext, getRenderRadius(renderContext.rendererJob.tile.zoomLevel), getFillPaint(renderContext.rendererJob.tile.zoomLevel), getStrokePaint(renderContext.rendererJob.tile.zoomLevel), this.level, poi);
-        }
+        renderCallback.renderPointOfInterestCircle(renderContext, getRenderRadius(renderContext.rendererJob.tile.zoomLevel), getFillPaint(renderContext.rendererJob.tile.zoomLevel), getStrokePaint(renderContext.rendererJob.tile.zoomLevel), this.level, poi);
     }
 
     @Override

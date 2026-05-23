@@ -26,8 +26,8 @@ import org.mapsforge.map.rendertheme.XmlUtils;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Represents a text along a polyline on the map.
@@ -62,15 +62,15 @@ public class PathText extends RenderInstruction {
         this.fill.setColor(Color.BLACK);
         this.fill.setStyle(Style.FILL);
         this.fill.setTextAlign(Align.CENTER);
-        this.fills = new HashMap<>();
+        this.fills = new ConcurrentHashMap<>();
         this.repeat = true;
 
         this.stroke = graphicFactory.createPaint();
         this.stroke.setColor(Color.BLACK);
         this.stroke.setStyle(Style.STROKE);
         this.stroke.setTextAlign(Align.CENTER);
-        this.strokes = new HashMap<>();
-        this.dyScaled = new HashMap<>();
+        this.strokes = new ConcurrentHashMap<>();
+        this.dyScaled = new ConcurrentHashMap<>();
         this.display = Display.IFSPACE;
         this.textTransform = TextTransform.NONE;
         this.textOrientation = TextOrientation.AUTO;
@@ -172,27 +172,25 @@ public class PathText extends RenderInstruction {
             return;
         }
 
-        synchronized (mySync) {
-            String caption = this.textKey.getValue(way.getTags());
-            if (caption == null) {
-                return;
-            }
-            if (displayModel.getThemeCallback() != null) {
-                caption = displayModel.getThemeCallback().getText(way, caption);
-            }
-
-            Float dyScale = this.dyScaled.get(renderContext.rendererJob.tile.zoomLevel);
-            if (dyScale == null) {
-                dyScale = this.dy;
-            }
-
-            renderCallback.renderWayText(renderContext, this.display, this.priority,
-                    transformText(caption, textTransform), dyScale,
-                    getFillPaint(renderContext.rendererJob.tile.zoomLevel),
-                    getStrokePaint(renderContext.rendererJob.tile.zoomLevel),
-                    this.repeat, this.repeatGap, this.repeatStart, this.textOrientation,
-                    way);
+        String caption = this.textKey.getValue(way.getTags());
+        if (caption == null) {
+            return;
         }
+        if (displayModel.getThemeCallback() != null) {
+            caption = displayModel.getThemeCallback().getText(way, caption);
+        }
+
+        Float dyScale = this.dyScaled.get(renderContext.rendererJob.tile.zoomLevel);
+        if (dyScale == null) {
+            dyScale = this.dy;
+        }
+
+        renderCallback.renderWayText(renderContext, this.display, this.priority,
+                transformText(caption, textTransform), dyScale,
+                getFillPaint(renderContext.rendererJob.tile.zoomLevel),
+                getStrokePaint(renderContext.rendererJob.tile.zoomLevel),
+                this.repeat, this.repeatGap, this.repeatStart, this.textOrientation,
+                way);
     }
 
     @Override

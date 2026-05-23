@@ -28,8 +28,8 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 /**
@@ -67,8 +67,8 @@ public class Line extends RenderInstruction {
         this.stroke.setStyle(Style.STROKE);
         this.stroke.setStrokeCap(Cap.ROUND);
         this.stroke.setStrokeJoin(Join.ROUND);
-        this.strokes = new HashMap<>();
-        this.dyScaled = new HashMap<>();
+        this.strokes = new ConcurrentHashMap<>();
+        this.dyScaled = new ConcurrentHashMap<>();
         this.curve = Curve.NO;
 
         extractValues(graphicFactory, displayModel, elementName, pullParser);

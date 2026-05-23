@@ -34,8 +34,8 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Represents an icon along a polyline on the map.
@@ -69,7 +69,7 @@ public class LineSymbol extends RenderInstruction {
         this.display = Display.IFSPACE;
         this.relativePathPrefix = relativePathPrefix;
         this.resourceProvider = resourceProvider;
-        this.dyScaled = new HashMap<>();
+        this.dyScaled = new ConcurrentHashMap<>();
         // Probably not a good default, but backwards compatible
         this.position = Position.BELOW_RIGHT;
         this.symbolOrientation = SymbolOrientation.LEFT;

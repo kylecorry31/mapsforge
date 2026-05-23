@@ -29,8 +29,8 @@ import org.mapsforge.map.rendertheme.XmlUtils;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Represents a text label on the map.
@@ -66,13 +66,13 @@ public class Caption extends RenderInstruction {
         this.fill = graphicFactory.createPaint();
         this.fill.setColor(Color.BLACK);
         this.fill.setStyle(Style.FILL);
-        this.fills = new HashMap<>();
+        this.fills = new ConcurrentHashMap<>();
 
         this.stroke = graphicFactory.createPaint();
         this.stroke.setColor(Color.BLACK);
         this.stroke.setStyle(Style.STROKE);
-        this.strokes = new HashMap<>();
-        this.dyScaled = new HashMap<>();
+        this.strokes = new ConcurrentHashMap<>();
+        this.dyScaled = new ConcurrentHashMap<>();
 
         this.display = Display.IFSPACE;
 
@@ -205,31 +205,29 @@ public class Caption extends RenderInstruction {
             return;
         }
 
-        synchronized (mySync) {
-            String caption = this.textKey.getValue(poi.tags);
-            if (caption == null) {
-                return;
-            }
-            if (displayModel.getThemeCallback() != null) {
-                caption = displayModel.getThemeCallback().getText(poi, caption);
-            }
-
-            float horizontalOffset = 0f;
-
-            Float verticalOffset = this.dyScaled.get(renderContext.rendererJob.tile.zoomLevel);
-            if (verticalOffset == null) {
-                verticalOffset = this.dy;
-            }
-
-            if (this.boundary != null) {
-                horizontalOffset = computeHorizontalOffset();
-                verticalOffset = computeVerticalOffset(renderContext.rendererJob.tile.zoomLevel);
-            }
-
-            renderCallback.renderPointOfInterestCaption(renderContext, this.display, this.priority,
-                    transformText(caption, textTransform), horizontalOffset, verticalOffset,
-                    getFillPaint(renderContext.rendererJob.tile.zoomLevel), getStrokePaint(renderContext.rendererJob.tile.zoomLevel), this.position, this.maxTextWidth, poi);
+        String caption = this.textKey.getValue(poi.tags);
+        if (caption == null) {
+            return;
         }
+        if (displayModel.getThemeCallback() != null) {
+            caption = displayModel.getThemeCallback().getText(poi, caption);
+        }
+
+        float horizontalOffset = 0f;
+
+        Float verticalOffset = this.dyScaled.get(renderContext.rendererJob.tile.zoomLevel);
+        if (verticalOffset == null) {
+            verticalOffset = this.dy;
+        }
+
+        if (this.boundary != null) {
+            horizontalOffset = computeHorizontalOffset();
+            verticalOffset = computeVerticalOffset(renderContext.rendererJob.tile.zoomLevel);
+        }
+
+        renderCallback.renderPointOfInterestCaption(renderContext, this.display, this.priority,
+                transformText(caption, textTransform), horizontalOffset, verticalOffset,
+                getFillPaint(renderContext.rendererJob.tile.zoomLevel), getStrokePaint(renderContext.rendererJob.tile.zoomLevel), this.position, this.maxTextWidth, poi);
     }
 
     @Override
@@ -238,30 +236,28 @@ public class Caption extends RenderInstruction {
             return;
         }
 
-        synchronized (mySync) {
-            String caption = this.textKey.getValue(way.getTags());
-            if (caption == null) {
-                return;
-            }
-            if (displayModel.getThemeCallback() != null) {
-                caption = displayModel.getThemeCallback().getText(way, caption);
-            }
-
-            float horizontalOffset = 0f;
-            Float verticalOffset = this.dyScaled.get(renderContext.rendererJob.tile.zoomLevel);
-            if (verticalOffset == null) {
-                verticalOffset = this.dy;
-            }
-
-            if (this.boundary != null) {
-                horizontalOffset = computeHorizontalOffset();
-                verticalOffset = computeVerticalOffset(renderContext.rendererJob.tile.zoomLevel);
-            }
-
-            renderCallback.renderAreaCaption(renderContext, this.display, this.priority,
-                    transformText(caption, textTransform), horizontalOffset, verticalOffset,
-                    getFillPaint(renderContext.rendererJob.tile.zoomLevel), getStrokePaint(renderContext.rendererJob.tile.zoomLevel), this.position, this.maxTextWidth, way);
+        String caption = this.textKey.getValue(way.getTags());
+        if (caption == null) {
+            return;
         }
+        if (displayModel.getThemeCallback() != null) {
+            caption = displayModel.getThemeCallback().getText(way, caption);
+        }
+
+        float horizontalOffset = 0f;
+        Float verticalOffset = this.dyScaled.get(renderContext.rendererJob.tile.zoomLevel);
+        if (verticalOffset == null) {
+            verticalOffset = this.dy;
+        }
+
+        if (this.boundary != null) {
+            horizontalOffset = computeHorizontalOffset();
+            verticalOffset = computeVerticalOffset(renderContext.rendererJob.tile.zoomLevel);
+        }
+
+        renderCallback.renderAreaCaption(renderContext, this.display, this.priority,
+                transformText(caption, textTransform), horizontalOffset, verticalOffset,
+                getFillPaint(renderContext.rendererJob.tile.zoomLevel), getStrokePaint(renderContext.rendererJob.tile.zoomLevel), this.position, this.maxTextWidth, way);
     }
 
     @Override

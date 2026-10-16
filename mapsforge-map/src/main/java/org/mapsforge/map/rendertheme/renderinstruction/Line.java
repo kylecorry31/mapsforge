@@ -146,7 +146,7 @@ public class Line extends RenderInstruction {
     }
 
     @Override
-    public synchronized void renderWay(RenderCallback renderCallback, final RenderContext renderContext, PolylineContainer way) {
+    public void renderWay(RenderCallback renderCallback, final RenderContext renderContext, PolylineContainer way) {
         synchronized (mySync) {
             if (!bitmapCreated) {
                 try {

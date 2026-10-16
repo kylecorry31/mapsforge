@@ -56,7 +56,9 @@ class IndexCache {
      * Destroy the cache at the end of its lifetime.
      */
     void destroy() {
-        this.map.clear();
+        synchronized (this.map) {
+            this.map.clear();
+        }
     }
 
     /**
@@ -81,7 +83,11 @@ class IndexCache {
         IndexCacheEntryKey indexCacheEntryKey = new IndexCacheEntryKey(subFileParameter, indexBlockNumber);
 
         // check for cached index block
-        byte[] indexBlock = this.map.get(indexCacheEntryKey);
+        byte[] indexBlock;
+        // The map is access-ordered, so even reads modify it.
+        synchronized (this.map) {
+            indexBlock = this.map.get(indexCacheEntryKey);
+        }
         if (indexBlock == null) {
             // cache miss, seek to the correct index block in the file and read it
             long indexBlockPosition = subFileParameter.indexStartAddress + indexBlockNumber * SIZE_OF_INDEX_BLOCK;
@@ -91,15 +97,14 @@ class IndexCache {
             indexBlock = new byte[indexBlockSize];
             ByteBuffer indexBlockWrapper = ByteBuffer.wrap(indexBlock, 0, indexBlockSize);
 
-            synchronized (this.fileChannel) {
-                this.fileChannel.position(indexBlockPosition);
-                if (this.fileChannel.read(indexBlockWrapper) != indexBlockSize) {
-                    throw new IOException("could not read index block with size: " + indexBlockSize);
-                }
+            if (this.fileChannel.read(indexBlockWrapper, indexBlockPosition) != indexBlockSize) {
+                throw new IOException("could not read index block with size: " + indexBlockSize);
             }
 
             // put the index block in the map
-            this.map.put(indexCacheEntryKey, indexBlock);
+            synchronized (this.map) {
+                this.map.put(indexCacheEntryKey, indexBlock);
+            }
         }
 
         // calculate the address of the index entry inside the index block

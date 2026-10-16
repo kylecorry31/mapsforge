@@ -132,10 +132,8 @@ public class ReadBuffer {
         this.bufferPosition = 0;
         this.bufferWrapper.clear();
 
-        synchronized (this.inputChannel) {
-            this.inputChannel.position(offset);
-            return this.inputChannel.read(this.bufferWrapper) == length;
-        }
+        // Positional reads leave the channel position alone, so concurrent readers need no lock.
+        return this.inputChannel.read(this.bufferWrapper, offset) == length;
     }
 
     /**

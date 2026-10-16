@@ -205,6 +205,11 @@ public class AwtPaint implements Paint {
     }
 
     @Override
+    public boolean hasBitmapShader() {
+        return this.texturePaint != null;
+    }
+
+    @Override
     public void setBitmapShader(Bitmap bitmap) {
         if (bitmap == null) {
             return;

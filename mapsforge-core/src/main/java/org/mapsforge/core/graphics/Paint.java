@@ -40,6 +40,8 @@ public interface Paint {
 
     boolean isComplexStyle();
 
+    boolean hasBitmapShader();
+
     void setBitmapShader(Bitmap bitmap);
 
     void setBitmapShaderShift(Point origin);

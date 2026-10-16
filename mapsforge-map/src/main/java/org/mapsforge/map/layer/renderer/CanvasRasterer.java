@@ -134,12 +134,15 @@ public class CanvasRasterer {
     }
 
     private void drawPath(ShapePaintContainer shapePaintContainer, Point[][] coordinates, float dy) {
+        boolean boundarySegmentsRemoved = false;
         if (shapePaintContainer.omitTileBoundarySegments && shapePaintContainer.shapeContainer instanceof PolylineContainer) {
             PolylineContainer polylineContainer = (PolylineContainer) shapePaintContainer.shapeContainer;
             Rectangle sourceTileBoundary = getSourceTileBoundary(polylineContainer);
             if (sourceTileBoundary != null) {
                 double enlargement = getSourceTileBoundaryEnlargement(polylineContainer);
-                coordinates = removeTileBoundarySegments(coordinates, sourceTileBoundary, enlargement);
+                Point[][] filtered = removeTileBoundarySegments(coordinates, sourceTileBoundary, enlargement);
+                boundarySegmentsRemoved = filtered != coordinates;
+                coordinates = filtered;
             }
         }
 
@@ -147,7 +150,7 @@ public class CanvasRasterer {
             // When cubic, paths must be used.
             makeCubicPath(coordinates, dy, this.path);
             drawPath(shapePaintContainer);
-        } else if (shapePaintContainer.omitTileBoundarySegments) {
+        } else if (boundarySegmentsRemoved) {
             makeLinesPath(coordinates, dy, this.path);
             drawPath(shapePaintContainer);
         } else if (shapePaintContainer.paint.isComplexStyle()) {
@@ -164,7 +167,7 @@ public class CanvasRasterer {
 
     private void drawPath(ShapePaintContainer shapePaintContainer) {
         if (!this.path.isEmpty()) {
-            if (Parameters.NUMBER_OF_THREADS > 1) {
+            if (Parameters.NUMBER_OF_THREADS > 1 && shapePaintContainer.paint.hasBitmapShader()) {
                 // Make sure setting the shader shift and actual drawing is synchronized,
                 // since the paint object is shared between multiple threads.
                 synchronized (shapePaintContainer.paint) {
@@ -183,7 +186,7 @@ public class CanvasRasterer {
     }
 
     private void drawLines(ShapePaintContainer shapePaintContainer, Point[][] coordinates, float dy) {
-        if (Parameters.NUMBER_OF_THREADS > 1) {
+        if (Parameters.NUMBER_OF_THREADS > 1 && shapePaintContainer.paint.hasBitmapShader()) {
             // Make sure setting the shader shift and actual drawing is synchronized,
             // since the paint object is shared between multiple threads.
             synchronized (shapePaintContainer.paint) {
@@ -269,6 +272,10 @@ public class CanvasRasterer {
 
     private static Point[][] removeTileBoundarySegments(Point[][] coordinates, Rectangle tileBoundary, double enlargement) {
         double tolerance = 1d;
+        if (!hasTileBoundarySegment(coordinates, tileBoundary, enlargement, tolerance)) {
+            return coordinates;
+        }
+
         List<Point[]> result = new ArrayList<>();
 
         for (Point[] points : coordinates) {
@@ -290,6 +297,18 @@ public class CanvasRasterer {
         }
 
         return result.toArray(new Point[result.size()][]);
+    }
+
+    private static boolean hasTileBoundarySegment(Point[][] coordinates, Rectangle tileBoundary,
+                                                  double enlargement, double tolerance) {
+        for (Point[] points : coordinates) {
+            for (int i = 1; i < points.length; ++i) {
+                if (isTileBoundarySegment(points[i - 1], points[i], tileBoundary, enlargement, tolerance)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private Rectangle getSourceTileBoundary(PolylineContainer polylineContainer) {

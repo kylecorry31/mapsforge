@@ -214,6 +214,11 @@ class AndroidPaint implements Paint {
     }
 
     @Override
+    public boolean hasBitmapShader() {
+        return this.paint.getShader() != null;
+    }
+
+    @Override
     public void setBitmapShader(org.mapsforge.core.graphics.Bitmap bitmap) {
         if (bitmap == null) {
             return;

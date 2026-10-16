@@ -28,6 +28,8 @@ import java.util.*;
  * provides functionality for accessing the SQLite database.
  */
 public abstract class AbstractPoiPersistenceManager implements PoiPersistenceManager {
+    public static boolean DEBUG = false;
+
     protected PoiCategoryManager categoryManager = null;
     protected String poiFile;
     protected PoiFileInfo poiFileInfo;
@@ -44,15 +46,30 @@ public abstract class AbstractPoiPersistenceManager implements PoiPersistenceMan
      * {@inheritDoc}
      */
     @Override
-    public Collection<PointOfInterest> findNearPosition(LatLong point, int distance,
-                                                        PoiCategoryFilter filter, List<Tag> patterns,
-                                                        LatLong orderBy, int limit, boolean findCategories) {
+    public Collection<PointOfInterest> findInRect(BoundingBox bb, PoiCategoryFilter filter, List<Tag> patterns) {
+        return findInRect(bb, filter, patterns, false, null, -1, false);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public Collection<PointOfInterest> findNearPosition(LatLong point, int distance, PoiCategoryFilter filter, List<Tag> patterns) {
+        return findNearPosition(point, distance, filter, patterns, false, null, -1, false);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public Collection<PointOfInterest> findNearPosition(LatLong point, int distance, PoiCategoryFilter filter, List<Tag> patterns,
+                                                        boolean orderByRank, LatLong orderByPoint, int limit, boolean findCategories) {
         double minLat = point.latitude - LatLongUtils.latitudeDistance(distance);
         double minLon = point.longitude - LatLongUtils.longitudeDistance(distance, point.latitude);
         double maxLat = point.latitude + LatLongUtils.latitudeDistance(distance);
         double maxLon = point.longitude + LatLongUtils.longitudeDistance(distance, point.latitude);
 
-        return findInRect(new BoundingBox(minLat, minLon, maxLat, maxLon), filter, patterns, orderBy, limit, findCategories);
+        return findInRect(new BoundingBox(minLat, minLon, maxLat, maxLon), filter, patterns, orderByRank, orderByPoint, limit, findCategories);
     }
 
     /**
@@ -85,32 +102,58 @@ public abstract class AbstractPoiPersistenceManager implements PoiPersistenceMan
 
     /**
      * Gets the SQL query that looks up POI entries.
+     * First text search and then spatial search.
      *
-     * @param filter  The filter object for determining all wanted categories (may be null).
-     * @param count   Count of patterns to search in points of interest data (may be 0).
-     * @param orderBy {@link LatLong} location of the sort.
+     * @param filter       The filter object for determining all wanted categories (may be null).
+     * @param count        Count of patterns to search in points of interest data (may be 0).
+     * @param orderByRank  Ranking results by relevance.
+     * @param orderByPoint {@link LatLong} location of the sort.
+     * @param limit        Max number of records to be returned.
+     * @param version      POI specification version.
      * @return The SQL query.
      */
-    protected static String getSQLSelectString(PoiCategoryFilter filter, int count, LatLong orderBy) {
+    protected static String getSQLSelectString(PoiCategoryFilter filter, int count, boolean orderByRank, LatLong orderByPoint, int limit, int version) {
         if (filter != null) {
-            return PoiCategoryRangeQueryGenerator.getSQLSelectString(filter, count, orderBy);
+            return PoiCategoryRangeQueryGenerator.getSQLSelectString(filter, count, orderByRank, orderByPoint, limit, version);
         }
         StringBuilder sb = new StringBuilder();
-        sb.append(DbConstants.FIND_IN_BOX_CLAUSE_SELECT);
-        sb.append(DbConstants.JOIN_DATA_CLAUSE);
-        sb.append(DbConstants.FIND_IN_BOX_CLAUSE_WHERE);
-        for (int i = 0; i < count; i++) {
-            sb.append(i == 0 ? " AND (" : " OR ");
-            sb.append(DbConstants.FIND_BY_DATA_CLAUSE);
-            if (i == count - 1) {
-                sb.append(")");
+        sb.append(version <= 3 ? DbConstants.FIND_IN_BOX_CLAUSE_SELECT_V3 : (orderByRank ? DbConstants.FIND_IN_BOX_CLAUSE_SELECT_RANK : DbConstants.FIND_IN_BOX_CLAUSE_SELECT));
+        if (version <= 3) {
+            sb.append(DbConstants.JOIN_INDEX_CLAUSE_V3);
+        } else {
+            sb.append(DbConstants.JOIN_INDEX_CLAUSE);
+        }
+        sb.append("WHERE ");
+        if (count > 0) {
+            for (int i = 0; i < count; i++) {
+                if (count > 1) {
+                    sb.append(i == 0 ? "(" : " OR ");
+                }
+                sb.append(version <= 3 ? DbConstants.FIND_BY_DATA_CLAUSE_V3 : DbConstants.FIND_BY_DATA_CLAUSE);
+                if (count > 1 && i == count - 1) {
+                    sb.append(")");
+                }
+            }
+            sb.append(" AND ");
+        }
+        sb.append(version <= 3 ? DbConstants.FIND_IN_BOX_CLAUSE_WHERE_V3 : DbConstants.FIND_IN_BOX_CLAUSE_WHERE);
+        if (orderByPoint != null) {
+            if (version <= 3) {
+                sb.append(" ORDER BY ((").append(orderByPoint.latitude).append(" - poi_index.lat) * (").append(orderByPoint.latitude).append(" - poi_index.lat))")
+                        .append(" + ((").append(orderByPoint.longitude).append(" - poi_index.lon) * (").append(orderByPoint.longitude).append(" - poi_index.lon))");
+            } else {
+                sb.append(" ORDER BY ((").append(orderByPoint.latitude).append(" - poi_index.minLat) * (").append(orderByPoint.latitude).append(" - poi_index.minLat))")
+                        .append(" + ((").append(orderByPoint.longitude).append(" - poi_index.minLon) * (").append(orderByPoint.longitude).append(" - poi_index.minLon))");
+            }
+        } else if (orderByRank) {
+            if (version >= 4) {
+                sb.append(" ORDER BY poi_data_fts.rank");
             }
         }
-        if (orderBy != null) {
-            sb.append(" ORDER BY ((").append(orderBy.latitude).append(" - poi_index.lat) * (").append(orderBy.latitude).append(" - poi_index.lat))")
-                    .append(" + ((").append(orderBy.longitude).append(" - poi_index.lon) * (").append(orderBy.longitude).append(" - poi_index.lon)) ASC");
+        if (limit > 0) {
+            sb.append(" LIMIT ?");
         }
-        return sb.append(" LIMIT ?;").toString();
+        return sb.append(";").toString();
     }
 
     /**

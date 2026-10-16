@@ -33,31 +33,59 @@ public final class PoiCategoryRangeQueryGenerator {
 
     /**
      * Gets the SQL query that looks up POI entries.
+     * First text search and then spatial search.
      *
-     * @param filter  The filter object for determining all wanted categories.
-     * @param count   Count of patterns to search in points of interest names (may be 0).
-     * @param orderBy {@link LatLong} location of the sort.
+     * @param filter       The filter object for determining all wanted categories.
+     * @param count        Count of patterns to search in points of interest names (may be 0).
+     * @param orderByRank  Ranking results by relevance.
+     * @param orderByPoint {@link LatLong} location of the sort.
+     * @param limit        Max number of records to be returned.
+     * @param version      POI specification version.
      * @return The SQL query.
      */
-    public static String getSQLSelectString(PoiCategoryFilter filter, int count, LatLong orderBy) {
+    public static String getSQLSelectString(PoiCategoryFilter filter, int count, boolean orderByRank, LatLong orderByPoint, int limit, int version) {
         StringBuilder sb = new StringBuilder();
-        sb.append(DbConstants.FIND_IN_BOX_CLAUSE_SELECT);
-        sb.append(DbConstants.JOIN_CATEGORY_CLAUSE);
-        sb.append(DbConstants.JOIN_DATA_CLAUSE);
-        sb.append(DbConstants.FIND_IN_BOX_CLAUSE_WHERE);
+        sb.append(version <= 3 ? DbConstants.FIND_IN_BOX_CLAUSE_SELECT_V3 : (orderByRank ? DbConstants.FIND_IN_BOX_CLAUSE_SELECT_RANK : DbConstants.FIND_IN_BOX_CLAUSE_SELECT));
+        if (version <= 3) {
+            sb.append(DbConstants.JOIN_CATEGORY_CLAUSE_V3);
+            sb.append(DbConstants.JOIN_INDEX_CLAUSE_V3);
+        } else {
+            sb.append(DbConstants.JOIN_CATEGORY_CLAUSE);
+            sb.append(DbConstants.JOIN_INDEX_CLAUSE);
+        }
+        sb.append("WHERE ");
+        if (count > 0) {
+            for (int i = 0; i < count; i++) {
+                if (count > 1) {
+                    sb.append(i == 0 ? "(" : " OR ");
+                }
+                sb.append(version <= 3 ? DbConstants.FIND_BY_DATA_CLAUSE_V3 : DbConstants.FIND_BY_DATA_CLAUSE);
+                if (count > 1 && i == count - 1) {
+                    sb.append(")");
+                }
+            }
+            sb.append(" AND ");
+        }
         sb.append(getSQLWhereClauseString(filter));
-        for (int i = 0; i < count; i++) {
-            sb.append(i == 0 ? " AND (" : " OR ");
-            sb.append(DbConstants.FIND_BY_DATA_CLAUSE);
-            if (i == count - 1) {
-                sb.append(")");
+        sb.append(" AND ");
+        sb.append(version <= 3 ? DbConstants.FIND_IN_BOX_CLAUSE_WHERE_V3 : DbConstants.FIND_IN_BOX_CLAUSE_WHERE);
+        if (orderByPoint != null) {
+            if (version <= 3) {
+                sb.append(" ORDER BY ((").append(orderByPoint.latitude).append(" - poi_index.lat) * (").append(orderByPoint.latitude).append(" - poi_index.lat))")
+                        .append(" + ((").append(orderByPoint.longitude).append(" - poi_index.lon) * (").append(orderByPoint.longitude).append(" - poi_index.lon))");
+            } else {
+                sb.append(" ORDER BY ((").append(orderByPoint.latitude).append(" - poi_index.minLat) * (").append(orderByPoint.latitude).append(" - poi_index.minLat))")
+                        .append(" + ((").append(orderByPoint.longitude).append(" - poi_index.minLon) * (").append(orderByPoint.longitude).append(" - poi_index.minLon))");
+            }
+        } else if (orderByRank) {
+            if (version >= 4) {
+                sb.append(" ORDER BY poi_data_fts.rank");
             }
         }
-        if (orderBy != null) {
-            sb.append(" ORDER BY ((").append(orderBy.latitude).append(" - poi_index.lat) * (").append(orderBy.latitude).append(" - poi_index.lat))")
-                    .append(" + ((").append(orderBy.longitude).append(" - poi_index.lon) * (").append(orderBy.longitude).append(" - poi_index.lon)) ASC");
+        if (limit > 0) {
+            sb.append(" LIMIT ?");
         }
-        return (sb.append(" LIMIT ?;").toString());
+        return sb.append(";").toString();
     }
 
     /**
@@ -74,33 +102,35 @@ public final class PoiCategoryRangeQueryGenerator {
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append(" AND (");
-        // for each super category
-        for (Iterator<PoiCategory> superCatIter = superCategories.iterator(); superCatIter.hasNext(); ) {
-            PoiCategory superCat = superCatIter.next();
-
-            // All child categories of the super category, including their children
-            Collection<PoiCategory> categories = superCat.deepChildren();
-            // Don't forget the super category itself in the search!
-            categories.add(superCat);
-
+        PoiCategory category = superCategories.iterator().next();
+        if (superCategories.size() == 1 && (category.getChildren() == null || category.getChildren().isEmpty())) {
+            sb.append(DbConstants.FIND_IN_BOX_CLAUSE_WHERE_CATEGORY_EQUALS).append(category.getID());
+        } else {
             sb.append(DbConstants.FIND_IN_BOX_CLAUSE_WHERE_CATEGORY_IN);
-            // for each category
-            for (Iterator<PoiCategory> catIter = categories.iterator(); catIter.hasNext(); ) {
-                PoiCategory cat = catIter.next();
-                sb.append(cat.getID());
-                if (catIter.hasNext()) {
+            // for each super category
+            for (Iterator<PoiCategory> superCatIter = superCategories.iterator(); superCatIter.hasNext(); ) {
+                PoiCategory superCat = superCatIter.next();
+
+                // All child categories of the super category, including their children
+                Collection<PoiCategory> categories = superCat.deepChildren();
+                // Don't forget the super category itself in the search!
+                categories.add(superCat);
+
+                // for each category
+                for (Iterator<PoiCategory> catIter = categories.iterator(); catIter.hasNext(); ) {
+                    PoiCategory cat = catIter.next();
+                    sb.append(cat.getID());
+                    if (catIter.hasNext()) {
+                        sb.append(", ");
+                    }
+                }
+
+                if (superCatIter.hasNext()) {
                     sb.append(", ");
                 }
             }
             sb.append(")");
-
-            // append OR if it is not the last
-            if (superCatIter.hasNext()) {
-                sb.append(" OR ");
-            }
         }
-        sb.append(")");
 
         return sb.toString();
     }

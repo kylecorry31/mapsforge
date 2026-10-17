@@ -18,7 +18,6 @@
 package org.mapsforge.map.rendertheme.renderinstruction;
 
 import org.mapsforge.core.graphics.*;
-import org.mapsforge.core.util.Parameters;
 import org.mapsforge.map.datastore.PointOfInterest;
 import org.mapsforge.map.layer.renderer.PolylineContainer;
 import org.mapsforge.map.model.DisplayModel;
@@ -131,8 +130,6 @@ public class Area extends RenderInstruction {
     @Override
     public void renderWay(RenderCallback renderCallback, final RenderContext renderContext, PolylineContainer way) {
         synchronized (mySync) {
-            // this needs to be synchronized as we potentially set a shift in the shader and
-            // the shift is particular to the tile when rendered in multi-thread mode
             Paint fillPaint = getFillPaint();
             if (shaderBitmap == null && !bitmapInvalid) {
                 try {
@@ -144,10 +141,6 @@ public class Area extends RenderInstruction {
                 } catch (IOException ioException) {
                     bitmapInvalid = true;
                 }
-            }
-
-            if (Parameters.NUMBER_OF_THREADS == 1) {
-                fillPaint.setBitmapShaderShift(way.getUpperLeft().getOrigin());
             }
 
             if (displayModel.getThemeCallback() != null) {

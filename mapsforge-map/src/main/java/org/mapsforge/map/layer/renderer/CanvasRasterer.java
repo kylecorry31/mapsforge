@@ -26,10 +26,10 @@ import org.mapsforge.core.model.Rectangle;
 import org.mapsforge.core.model.Rotation;
 import org.mapsforge.core.model.Tile;
 import org.mapsforge.core.util.MercatorProjection;
-import org.mapsforge.core.util.Parameters;
 import org.mapsforge.map.rendertheme.RenderContext;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -134,24 +134,18 @@ public class CanvasRasterer {
     }
 
     private void drawPath(ShapePaintContainer shapePaintContainer, Point[][] coordinates, float dy) {
-        boolean boundarySegmentsRemoved = false;
         if (shapePaintContainer.omitTileBoundarySegments && shapePaintContainer.shapeContainer instanceof PolylineContainer) {
             PolylineContainer polylineContainer = (PolylineContainer) shapePaintContainer.shapeContainer;
             Rectangle sourceTileBoundary = getSourceTileBoundary(polylineContainer);
             if (sourceTileBoundary != null) {
                 double enlargement = getSourceTileBoundaryEnlargement(polylineContainer);
-                Point[][] filtered = removeTileBoundarySegments(coordinates, sourceTileBoundary, enlargement);
-                boundarySegmentsRemoved = filtered != coordinates;
-                coordinates = filtered;
+                coordinates = removeTileBoundarySegments(coordinates, sourceTileBoundary, enlargement);
             }
         }
 
         if (shapePaintContainer.curveStyle == Curve.CUBIC) {
             // When cubic, paths must be used.
             makeCubicPath(coordinates, dy, this.path);
-            drawPath(shapePaintContainer);
-        } else if (boundarySegmentsRemoved) {
-            makeLinesPath(coordinates, dy, this.path);
             drawPath(shapePaintContainer);
         } else if (shapePaintContainer.paint.isComplexStyle()) {
             // When complex (e.g. filled) style, paths must be used.
@@ -167,7 +161,7 @@ public class CanvasRasterer {
 
     private void drawPath(ShapePaintContainer shapePaintContainer) {
         if (!this.path.isEmpty()) {
-            if (Parameters.NUMBER_OF_THREADS > 1 && shapePaintContainer.paint.hasBitmapShader()) {
+            if (shapePaintContainer.paint.hasBitmapShader()) {
                 // Make sure setting the shader shift and actual drawing is synchronized,
                 // since the paint object is shared between multiple threads.
                 synchronized (shapePaintContainer.paint) {
@@ -186,7 +180,7 @@ public class CanvasRasterer {
     }
 
     private void drawLines(ShapePaintContainer shapePaintContainer, Point[][] coordinates, float dy) {
-        if (Parameters.NUMBER_OF_THREADS > 1 && shapePaintContainer.paint.hasBitmapShader()) {
+        if (shapePaintContainer.paint.hasBitmapShader()) {
             // Make sure setting the shader shift and actual drawing is synchronized,
             // since the paint object is shared between multiple threads.
             synchronized (shapePaintContainer.paint) {
@@ -272,43 +266,38 @@ public class CanvasRasterer {
 
     private static Point[][] removeTileBoundarySegments(Point[][] coordinates, Rectangle tileBoundary, double enlargement) {
         double tolerance = 1d;
-        if (!hasTileBoundarySegment(coordinates, tileBoundary, enlargement, tolerance)) {
-            return coordinates;
-        }
+        // Allocated on the first boundary segment, so ways without one are returned unchanged.
+        List<Point[]> result = null;
 
-        List<Point[]> result = new ArrayList<>();
-
-        for (Point[] points : coordinates) {
-            List<Point> current = new ArrayList<>();
+        for (int j = 0; j < coordinates.length; ++j) {
+            Point[] points = coordinates[j];
+            List<Point> current = result == null ? null : new ArrayList<Point>();
             for (int i = 1; i < points.length; ++i) {
                 Point previous = points[i - 1];
                 Point next = points[i];
                 if (isTileBoundarySegment(previous, next, tileBoundary, enlargement, tolerance)) {
+                    if (result == null) {
+                        result = new ArrayList<>();
+                        for (int k = 0; k < j; ++k) {
+                            addSegment(result, Arrays.asList(coordinates[k]));
+                        }
+                        current = new ArrayList<>(Arrays.asList(points).subList(0, i));
+                    }
                     addSegment(result, current);
                     current.clear();
-                } else {
+                } else if (current != null) {
                     if (current.isEmpty()) {
                         current.add(previous);
                     }
                     current.add(next);
                 }
             }
-            addSegment(result, current);
-        }
-
-        return result.toArray(new Point[result.size()][]);
-    }
-
-    private static boolean hasTileBoundarySegment(Point[][] coordinates, Rectangle tileBoundary,
-                                                  double enlargement, double tolerance) {
-        for (Point[] points : coordinates) {
-            for (int i = 1; i < points.length; ++i) {
-                if (isTileBoundarySegment(points[i - 1], points[i], tileBoundary, enlargement, tolerance)) {
-                    return true;
-                }
+            if (current != null) {
+                addSegment(result, current);
             }
         }
-        return false;
+
+        return result == null ? coordinates : result.toArray(new Point[result.size()][]);
     }
 
     private Rectangle getSourceTileBoundary(PolylineContainer polylineContainer) {

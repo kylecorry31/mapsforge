@@ -131,6 +131,25 @@ public class Line extends RenderInstruction {
         return paint;
     }
 
+    /**
+     * Loads the shader bitmap on first use and applies it to the base stroke. The shader shift is set
+     * per tile by the rasterer, so paints are never modified here while another thread draws with them.
+     */
+    private Bitmap getShaderBitmap() {
+        if (!bitmapCreated) {
+            try {
+                shaderBitmap = createBitmap(relativePathPrefix, src, resourceProvider);
+            } catch (IOException ioException) {
+                // no-op
+            }
+            if (shaderBitmap != null) {
+                this.stroke.setBitmapShader(shaderBitmap);
+            }
+            bitmapCreated = true;
+        }
+        return shaderBitmap;
+    }
+
     private static float[] parseFloatArray(String name, String dashString) throws XmlPullParserException {
         String[] dashEntries = SPLIT_PATTERN.split(dashString);
         float[] dashIntervals = new float[dashEntries.length];
@@ -148,21 +167,8 @@ public class Line extends RenderInstruction {
     @Override
     public void renderWay(RenderCallback renderCallback, final RenderContext renderContext, PolylineContainer way) {
         synchronized (mySync) {
-            if (!bitmapCreated) {
-                try {
-                    shaderBitmap = createBitmap(relativePathPrefix, src, resourceProvider);
-                } catch (IOException ioException) {
-                    // no-op
-                }
-                bitmapCreated = true;
-            }
-
+            getShaderBitmap();
             Paint strokePaint = getStrokePaint(renderContext.rendererJob.tile.zoomLevel);
-
-            if (shaderBitmap != null) {
-                strokePaint.setBitmapShader(shaderBitmap);
-                strokePaint.setBitmapShaderShift(way.getUpperLeft().getOrigin());
-            }
 
             Float dyScale = this.dyScaled.get(renderContext.rendererJob.tile.zoomLevel);
             if (dyScale == null) {
@@ -181,6 +187,11 @@ public class Line extends RenderInstruction {
             if (this.stroke != null) {
                 Paint paint = graphicFactory.createPaint(stroke);
                 paint.setStrokeWidth(this.strokeWidth * scaleFactor);
+                Bitmap bitmap = getShaderBitmap();
+                if (bitmap != null) {
+                    // Copies don't get their own shader, and each paint needs one for its shift.
+                    paint.setBitmapShader(bitmap);
+                }
                 if (this.scale == Scale.ALL) {
                     float[] strokeDasharrayScaled = new float[this.strokeDasharray.length];
                     for (int i = 0; i < strokeDasharray.length; i++) {

@@ -39,8 +39,15 @@ class IndexCache {
      */
     private static final int SIZE_OF_INDEX_BLOCK = INDEX_ENTRIES_PER_BLOCK * SubFileParameter.BYTES_PER_INDEX_ENTRY;
 
+    /**
+     * Locks that let a single thread read a missing block while others wait for it. Striped so that reads of
+     * unrelated blocks rarely wait on each other, without tracking one lock per block.
+     */
+    private static final int READ_LOCK_COUNT = 16;
+
     private final Map<IndexCacheEntryKey, byte[]> map;
     private final FileChannel fileChannel;
+    private final Object[] readLocks = new Object[READ_LOCK_COUNT];
 
     /**
      * @param inputChannel the map file from which the index should be read and cached.
@@ -50,6 +57,9 @@ class IndexCache {
     IndexCache(FileChannel inputChannel, int capacity) {
         this.fileChannel = inputChannel;
         this.map = new LRUCache<IndexCacheEntryKey, byte[]>(capacity);
+        for (int i = 0; i < READ_LOCK_COUNT; ++i) {
+            this.readLocks[i] = new Object();
+        }
     }
 
     /**
@@ -83,27 +93,30 @@ class IndexCache {
         IndexCacheEntryKey indexCacheEntryKey = new IndexCacheEntryKey(subFileParameter, indexBlockNumber);
 
         // check for cached index block
-        byte[] indexBlock;
-        // The map is access-ordered, so even reads modify it.
-        synchronized (this.map) {
-            indexBlock = this.map.get(indexCacheEntryKey);
-        }
+        byte[] indexBlock = getCachedIndexBlock(indexCacheEntryKey);
         if (indexBlock == null) {
-            // cache miss, seek to the correct index block in the file and read it
-            long indexBlockPosition = subFileParameter.indexStartAddress + indexBlockNumber * SIZE_OF_INDEX_BLOCK;
+            Object readLock = this.readLocks[(indexCacheEntryKey.hashCode() & Integer.MAX_VALUE) % READ_LOCK_COUNT];
+            synchronized (readLock) {
+                // another thread may have read it while this one was waiting
+                indexBlock = getCachedIndexBlock(indexCacheEntryKey);
+                if (indexBlock == null) {
+                    // cache miss, seek to the correct index block in the file and read it
+                    long indexBlockPosition = subFileParameter.indexStartAddress + indexBlockNumber * SIZE_OF_INDEX_BLOCK;
 
-            int remainingIndexSize = (int) (subFileParameter.indexEndAddress - indexBlockPosition);
-            int indexBlockSize = Math.min(SIZE_OF_INDEX_BLOCK, remainingIndexSize);
-            indexBlock = new byte[indexBlockSize];
-            ByteBuffer indexBlockWrapper = ByteBuffer.wrap(indexBlock, 0, indexBlockSize);
+                    int remainingIndexSize = (int) (subFileParameter.indexEndAddress - indexBlockPosition);
+                    int indexBlockSize = Math.min(SIZE_OF_INDEX_BLOCK, remainingIndexSize);
+                    indexBlock = new byte[indexBlockSize];
+                    ByteBuffer indexBlockWrapper = ByteBuffer.wrap(indexBlock, 0, indexBlockSize);
 
-            if (this.fileChannel.read(indexBlockWrapper, indexBlockPosition) != indexBlockSize) {
-                throw new IOException("could not read index block with size: " + indexBlockSize);
-            }
+                    if (this.fileChannel.read(indexBlockWrapper, indexBlockPosition) != indexBlockSize) {
+                        throw new IOException("could not read index block with size: " + indexBlockSize);
+                    }
 
-            // put the index block in the map
-            synchronized (this.map) {
-                this.map.put(indexCacheEntryKey, indexBlock);
+                    // put the index block in the map
+                    synchronized (this.map) {
+                        this.map.put(indexCacheEntryKey, indexBlock);
+                    }
+                }
             }
         }
 
@@ -113,5 +126,12 @@ class IndexCache {
 
         // return the real index entry
         return Deserializer.getFiveBytesLong(indexBlock, addressInIndexBlock);
+    }
+
+    private byte[] getCachedIndexBlock(IndexCacheEntryKey indexCacheEntryKey) {
+        // The map is access-ordered, so even reads modify it.
+        synchronized (this.map) {
+            return this.map.get(indexCacheEntryKey);
+        }
     }
 }
